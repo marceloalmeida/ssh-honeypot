@@ -1,0 +1,61 @@
+version: "3.9"
+
+networks:
+  default:
+    name: ssh-honeypot
+    driver: bridge
+
+services:
+  ssh-honeypot:
+    depends_on:
+      - jaeger
+      - influxdb
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    ports:
+      - "2222:2222"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317
+      - OTEL_SERVICE_NAME=ssh-honeypot
+      - IPINFOIO_TOKEN=
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=admin.token
+      - INFLUXDB_ORG=ssh-honeypot
+      - INFLUXDB_BUCKET=ssh-honeypot
+      - HOST_KEY_PATH=/app/host_key/host_key
+      - INFLUXDB_WRITE_PRIVATE_IPS=true
+      - INFLUXDB_NON_BLOCKING_WRITES=false
+    volumes:
+      - ./host_key:/app/host_key
+
+
+  influxdb:
+    image: influxdb:2.0.7
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminadmin
+      - DOCKER_INFLUXDB_INIT_ORG=ssh-honeypot
+      - DOCKER_INFLUXDB_INIT_BUCKET=ssh-honeypot
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=admin.token
+      - DOCKER_INFLUXDB_INIT_RETENTION=1h
+    volumes:
+      - ./influxdb2:/var/lib/influxdb2
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    restart: unless-stopped
