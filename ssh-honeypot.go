@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/gliderlabs/ssh"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -73,8 +75,14 @@ func getIpInfo(host string, ctx context.Context, tracer trace.Tracer) (IPInfo, e
 	if ipinfoIoToken != "" {
 		tmp, err := getIpInfoIo(host, childCtx, tracer)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return IPInfo{}, err
 		}
+
+		span.AddEvent("Got IP info from ipinfo.io")
+		span.SetStatus(codes.Ok, fmt.Sprintf("Got IP info from ipinfo.io for '%s'", host))
+
 		return IPInfo{
 			IP:        host,
 			City:      tmp.City,
@@ -88,9 +96,13 @@ func getIpInfo(host string, ctx context.Context, tracer trace.Tracer) (IPInfo, e
 	} else {
 		tmp, err := getIpApi(host, childCtx, tracer)
 		if err != nil {
-			log.Printf("Failed to get IP info from ip-api.com: %v", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return IPInfo{}, err
 		}
+
+		span.AddEvent("Got IP info from ip-api.com'")
+		span.SetStatus(codes.Ok, fmt.Sprintf("Got IP info from ip-api.com for '%s'", host))
 
 		return IPInfo{
 			IP:        host,
@@ -141,19 +153,30 @@ func processRequest(writeAPI InfluxdbWriteAPI, sshContext ssh.Context, ctx conte
 	}
 
 	if (net.ParseIP(remote_host).IsPrivate() || net.ParseIP(remote_host).IsLoopback()) && os.Getenv("INFLUXDB_WRITE_PRIVATE_IPS") != "true" {
+		span.AddEvent("Request from private or loopback IP, or 'INFLUXDB_WRITE_PRIVATE_IPS' is set, skipping write to InfluxDB")
 		log.Printf("Request to '%s' from private or loopback IP: '%s', or 'INFLUXDB_WRITE_PRIVATE_IPS' is set to '%s', skipping write to InfluxDB", sshInfo.Function, remote_host, os.Getenv("INFLUXDB_WRITE_PRIVATE_IPS"))
 		sshContext.Done()
 	} else {
+		span.AddEvent("Request inccoming")
 		log.Printf("Request to '%s' from '%s'", sshInfo.Function, remote_host)
 		ipInfo, err := getIpInfo(sshInfo.RemoteHost, childCtx, tracer)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			log.Printf("Failed to get IP info: %v", err)
 			return err
 		}
 
-		return writeToInfluxDB(writeAPI, ipInfo, sshInfo, childCtx, tracer)
+		if writeToInfluxDB(writeAPI, ipInfo, sshInfo, childCtx, tracer) != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			log.Printf("Failed to write to InfluxDB: %v", err)
+			return err
+		}
 	}
 
+	span.AddEvent("Request successfully processed")
+	span.SetStatus(codes.Ok, fmt.Sprintf("Request to '%s' from '%s' successfully processed", sshInfo.Function, remote_host))
 	return nil
 }
 
@@ -164,18 +187,23 @@ func processRequestExponentialBackoff(writeAPI InfluxdbWriteAPI, sshContext ssh.
 	defer span.End()
 
 	backoffSettings := backoff.NewExponentialBackOff()
-	backoffSettings.MaxElapsedTime = 5 * time.Minute
+	backoffSettings.MaxElapsedTime = 30 * time.Minute
+	backoffContext := backoff.WithContext(backoffSettings, childCtx)
 
 	operation := func() error {
-		return processRequest(writeAPI, sshContext, childCtx, tracer)
+		return processRequest(writeAPI, sshContext, backoffContext.Context(), tracer)
 	}
 
-	err := backoff.Retry(operation, backoffSettings)
+	err := backoff.Retry(operation, backoffContext)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		log.Printf("Failed to process request: %v", err)
 		return err
 	}
 
+	span.AddEvent("Successfully processed request")
+	span.SetStatus(codes.Ok, "Successfully processed request")
 	log.Printf("Successfully processed request")
 	return nil
 }

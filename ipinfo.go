@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -35,6 +36,8 @@ func getIpInfoIo(host string, ctx context.Context, tracer trace.Tracer) (IPInfoI
 	url := fmt.Sprintf("https://ipinfo.io/%s", host)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IPInfoIo{}, err
 	}
 
@@ -43,19 +46,28 @@ func getIpInfoIo(host string, ctx context.Context, tracer trace.Tracer) (IPInfoI
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IPInfoIo{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IPInfoIo{}, err
 	}
 
 	result, err := unmarshallgetIpInfoIo(body, childCtx, tracer)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IPInfoIo{}, err
 	}
+
+	span.AddEvent("Successfully got IP info from ipinfo.io")
+	span.SetStatus(codes.Ok, fmt.Sprintf("Successfully got IP info for '%s' from ipinfo.io", host))
 
 	return result, nil
 }
@@ -68,6 +80,10 @@ func parseLoc(loc string, ctx context.Context, tracer trace.Tracer) (float64, fl
 
 	var lat, long float64
 	fmt.Sscanf(loc, "%f,%f", &lat, &long)
+
+	span.AddEvent("Successfully parsed location")
+	span.SetStatus(codes.Ok, "Successfully parsed location")
+
 	return lat, long
 }
 
@@ -82,5 +98,9 @@ func unmarshallgetIpInfoIo(body []byte, ctx context.Context, tracer trace.Tracer
 	lat, long := parseLoc(ipInfoIo.Loc, childCtx, tracer)
 	ipInfoIo.Latitude = lat
 	ipInfoIo.Longitude = long
+
+	span.AddEvent("Successfully unmarshalled IP info from ipinfo.io")
+	span.SetStatus(codes.Ok, "Successfully unmarshalled IP info from ipinfo.io")
+
 	return ipInfoIo, nil
 }

@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	cache "github.com/patrickmn/go-cache"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -53,13 +55,15 @@ func getIpApi(host string, ctx context.Context, tracer trace.Tracer) (IpApi, err
 		"getIpApi")
 	defer span.End()
 
-	log.Printf("Getting IP info for '%s' from ip-api.com", host)
-
 	wait, found := c.Get("getIpApiRt")
 	if found && wait.(time.Duration) > 0*time.Second {
+		span.AddEvent("Rate limit key found on cache, sleeping")
 		log.Printf("Rate limit key found on cache, sleeping for %s", wait)
 		time.Sleep(wait.(time.Duration))
 	}
+
+	span.AddEvent("Getting IP info from ip-api.com")
+	log.Printf("Getting IP info for '%s' from ip-api.com", host)
 
 	fields := []string{
 		"status",
@@ -92,44 +96,72 @@ func getIpApi(host string, ctx context.Context, tracer trace.Tracer) (IpApi, err
 	url := fmt.Sprintf("http://ip-api.com/json/%s?fields=%s", host, strings.Join(fields, ","))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		span.AddEvent("Error creating request for ip-api.com, re-invoking request after sleeping")
+		if found {
+			log.Printf("Error creating request for ip-api.com, re-invoking request after sleeping for %s", wait)
+			c.Set("getIpApiRt", wait.(time.Duration)+1*time.Second, wait.(time.Duration)+1*time.Second)
+		} else {
+			log.Printf("Error creating request for ip-api.com, re-invoking request after sleeping for 1 second")
+			c.Set("getIpApiRt", 1*time.Second, 1*time.Second)
+		}
+
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IpApi{}, err
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IpApi{}, err
 	}
 	defer resp.Body.Close()
 
 	respHeaderXRl, err := strconv.ParseInt(resp.Header.Get("X-Rl"), 10, 32)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IpApi{}, err
 	}
+
 	if resp.StatusCode == http.StatusTooManyRequests || respHeaderXRl <= 16 {
 		xTtl, err := parseTime(resp.Header.Get("X-Ttl"))
+		xTtl += time.Duration(1+rand.Int63n(respHeaderXRl)) * time.Second
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return IpApi{}, err
 		}
 
+		span.AddEvent("Rate limited, re-invoking request after sleeping")
+		span.SetStatus(codes.Error, fmt.Sprintf("Rate limited, re-invoking request after sleeping for %s. X-Rl: %d", xTtl, respHeaderXRl))
 		log.Printf("Rate limited, re-invoking request after sleeping for %s. X-Rl: %d", xTtl, respHeaderXRl)
+
 		c.Set("getIpApiRt", xTtl, xTtl)
-		time.Sleep(xTtl + 1*time.Second)
-		return getIpApi(host, childCtx, tracer)
+
+		return IpApi{}, fmt.Errorf("rate limited")
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IpApi{}, err
 	}
 
 	result, err := unmarshallgetIpApi(body, childCtx, tracer)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return IpApi{}, err
 	}
 
 	result.IP = host
 
+	span.AddEvent("Successfully got IP info from ip-api.com")
+	span.SetStatus(codes.Ok, fmt.Sprintf("Successfully got IP info for '%s' from ip-api.com", host))
 	return result, nil
 }
 
@@ -141,6 +173,9 @@ func unmarshallgetIpApi(body []byte, ctx context.Context, tracer trace.Tracer) (
 
 	var ipApi IpApi
 	json.Unmarshal(body, &ipApi)
+
+	span.AddEvent("Successfully unmarshalled IP info from ip-api.com")
+	span.SetStatus(codes.Ok, "Successfully unmarshalled IP info from ip-api.com")
 	return ipApi, nil
 }
 

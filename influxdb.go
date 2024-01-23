@@ -7,6 +7,7 @@ import (
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	influxdb2api "github.com/influxdata/influxdb-client-go/v2/api"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -42,22 +43,33 @@ func writeToInfluxDB(writeAPI InfluxdbWriteAPI, ipInfo IPInfo, sshInfo SSHInfo, 
 		SetTime(sshInfo.Timestamp)
 
 	if os.Getenv("INFLUXDB_NON_BLOCKING_WRITES") == "true" {
+		span.AddEvent("Writing to InfluxDB in non-blocking mode")
 		log.Printf("Writing to InfluxDB in non-blocking mode")
 		errorsCh := writeAPI.WriteAPI.Errors()
-		go func() {
+		go func() error {
 			for err := range errorsCh {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				log.Printf("write error: %s\n", err.Error())
+				return err
 			}
+
+			return nil
 		}()
 		writeAPI.WriteAPI.WritePoint(point)
 	} else {
+		span.AddEvent("Writing to InfluxDB in blocking mode")
 		log.Printf("Writing to InfluxDB in blocking mode")
 		err := writeAPI.WriteAPIBlocking.WritePoint(context.Background(), point)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			log.Printf("failed to write to InfluxDB: %v", err)
 			return err
 		}
 	}
 
+	span.AddEvent("Successfully wrote to InfluxDB")
+	span.SetStatus(codes.Ok, "Successfully wrote to InfluxDB")
 	return nil
 }
