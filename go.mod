@@ -3,6 +3,7 @@ module github.com/marceloalmeida/ssh-honeypot
 go 1.21.6
 
 require (
+	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/gliderlabs/ssh v0.3.6
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	go.opentelemetry.io/otel v1.21.0
@@ -15,7 +16,6 @@ require (
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
-	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
