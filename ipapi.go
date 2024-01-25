@@ -128,7 +128,7 @@ func getIpApi(host string, ctx context.Context, tracer trace.Tracer) (IpApi, err
 
 	if resp.StatusCode == http.StatusTooManyRequests || respHeaderXRl <= 16 {
 		xTtl, err := parseTime(resp.Header.Get("X-Ttl"))
-		xTtl += time.Duration(1+rand.Int63n(respHeaderXRl)) * time.Second
+		xTtl += time.Duration(1+rand.Int63n(respHeaderXRl+1)) * time.Second
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
