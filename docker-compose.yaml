@@ -10,6 +10,7 @@ services:
     depends_on:
       - jaeger
       - influxdb
+    image: ghcr.io/marceloalmeida/ssh-honeypot:latest
     build:
       context: .
       dockerfile: ./Dockerfile
@@ -28,7 +29,6 @@ services:
       - INFLUXDB_NON_BLOCKING_WRITES=false
     volumes:
       - ./host_key:/app/host_key
-
 
   influxdb:
     image: influxdb:2.0.7
