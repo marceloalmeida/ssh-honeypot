@@ -27,3 +27,6 @@ influxdb2
 host_key
 host_key.pub
 ssh-honeypot
+
+# OS files
+.DS_Store

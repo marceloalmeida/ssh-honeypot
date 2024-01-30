@@ -11,7 +11,7 @@ COPY . ./
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ssh-honeypot .
 
 
-FROM gcr.io/distroless/base-debian10
+FROM gcr.io/distroless/base-debian12
 
 LABEL org.opencontainers.image.source https://github.com/marceloalmeida/ssh-honeypot
 
