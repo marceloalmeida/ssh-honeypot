@@ -6,7 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/gliderlabs/ssh v0.3.6
+	github.com/gliderlabs/ssh v0.3.8
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.35.0
