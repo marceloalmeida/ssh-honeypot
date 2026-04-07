@@ -12,6 +12,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+var ipInfoIoBaseURL = "https://ipinfo.io"
+
 type IPInfoIo struct {
 	IP        string  `json:"ip"`
 	Hostname  string  `json:"hostname"`
@@ -33,7 +35,7 @@ func getIpInfoIo(host string, ctx context.Context, tracer trace.Tracer) (IPInfoI
 	defer span.End()
 
 	log.Printf("Getting IP info for '%s' from ipinfo.io", host)
-	url := fmt.Sprintf("https://ipinfo.io/%s", host)
+	url := fmt.Sprintf("%s/%s", ipInfoIoBaseURL, host)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		span.RecordError(err)
