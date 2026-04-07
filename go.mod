@@ -1,6 +1,6 @@
 module github.com/marceloalmeida/ssh-honeypot
 
-go 1.24.0
+go 1.26.1
 
 toolchain go1.24.2
 
