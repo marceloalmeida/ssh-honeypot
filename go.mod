@@ -2,7 +2,7 @@ module github.com/marceloalmeida/ssh-honeypot
 
 go 1.26.1
 
-toolchain go1.24.2
+toolchain go1.26.1
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
