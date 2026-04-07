@@ -46,7 +46,8 @@ type IpApi struct {
 }
 
 var (
-	c = cache.New(5*time.Minute, 10*time.Minute)
+	c             = cache.New(5*time.Minute, 10*time.Minute)
+	ipApiBaseURL  = "http://ip-api.com"
 )
 
 func getIpApi(host string, ctx context.Context, tracer trace.Tracer) (IpApi, error) {
@@ -93,7 +94,7 @@ func getIpApi(host string, ctx context.Context, tracer trace.Tracer) (IpApi, err
 		"query",
 	}
 
-	url := fmt.Sprintf("http://ip-api.com/json/%s?fields=%s", host, strings.Join(fields, ","))
+	url := fmt.Sprintf("%s/json/%s?fields=%s", ipApiBaseURL, host, strings.Join(fields, ","))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		span.AddEvent("Error creating request for ip-api.com, re-invoking request after sleeping")
