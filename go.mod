@@ -7,7 +7,7 @@ require (
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	go.opentelemetry.io/otel v1.44.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
